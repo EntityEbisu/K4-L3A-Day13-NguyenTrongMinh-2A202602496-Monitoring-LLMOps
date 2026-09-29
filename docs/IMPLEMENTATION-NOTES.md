@@ -23,10 +23,9 @@ là output của script chạy được, và các script đó đọc dữ liệu
 
 ---
 
-## 2. Ba lỗi thật đã phát hiện và xử lý
+## 2. Hai lỗi thật và một kết luận sai đã được sửa
 
-Đây là phần quan trọng nhất để bảo vệ được khi Q&A. Cả ba đều là lỗi *nguy hiểm*
-vì nhìn bên ngoài tưởng đã đúng.
+Phần này là nguyên liệu để bảo vệ khi Q&A.
 
 ### 2.1 `user_id_hash` có thể bị quy là rò rỉ CCCD (−30 điểm)
 
@@ -55,18 +54,41 @@ và đối chiếu với đúng detector của validator.
 **Đánh đổi đã chấp nhận:** entropy giảm từ 48 xuống 32 bit. Chấp nhận được vì
 mục đích chỉ là pseudonym để nối log, không phải chống đoán trùng lặp.
 
-### 2.2 `update_current_*()` của Langfuse bị bỏ qua âm thầm
+### 2.2 Endpoint đọc trace không trả metadata (kết luận sai ban đầu)
 
-Instrument bằng `@observe` tạo đúng span, nhưng `client.update_current_span()`
-và `client.update_current_generation()` **không ghi được gì**: `model`,
-`usage_details`, `cost_details`, `metadata` đều không tới server.
+Khi đọc lại trace qua `/api/public/v2/observations`, các trường `model`,
+`usage_details`, `cost_details`, `metadata`, `input`, `output` đều là `None`.
 
-Đã cô lập bằng script độc lập (root + child, có `propagate_attributes`): span
-đúng cây, `user_id`/`session_id`/`environment` có mặt, nhưng mọi trường do
-`update_current_*` gán đều rỗng. `propagate_attributes` hoạt động;
-`update_current_*` thì không.
+Tôi **kết luận sai** rằng `update_current_span()` / `update_current_generation()`
+không ghi được gì, và đã ghi điều đó vào báo cáo. Đã thử lại ba cách ghi:
 
-Đây chính là lý do rubric yêu cầu *evidence runtime* chứ không chỉ validator xanh.
+| Cách | Kết quả đọc lại qua API |
+|---|---|
+| `update_current_generation(...)` | `modelId=None`, `totalPrice=None` |
+| `start_observation(..., model=…, usage_details=…)` | `modelId=None`, `totalPrice=None` |
+| `start_as_current_observation(..., model=…, usage_details=…)` | `modelId=None`, `totalPrice=None` |
+
+Kết luận đúng: **đây là hạn chế của phía đọc, không phải phía ghi.** Endpoint v2
+chỉ trả về tập cột rút gọn:
+
+```
+bookmarked, endTime, environment, id, inputPrice, isRootObservation, latency,
+level, modelId, name, outputPrice, parentObservationId, projectId, public,
+sessionId, startTime, statusMessage, timeToFirstToken, totalPrice, traceId,
+type, userId, version
+```
+
+Còn trên **UI**, span `llm-generation` hiển thị đủ: `model = claude-sonnet-4-5`,
+`cost = $0.001422`, `139 tokens`, liên kết prompt `day13-chat (v1)` — xem ảnh
+`submission/evidence/07-trace-waterfall.png` và `14-incident-trace.png`.
+
+Bài học: **không kết luận "ghi hỏng" chỉ từ việc API đọc trả rỗng.** Phải kiểm tra
+nơi dữ liệu thực sự được hiển thị trước khi kết luận. Việc instrument hiện tại
+(`update_current_*`) là đúng và không cần sửa.
+
+Đây cũng là lý do rubric yêu cầu *evidence runtime* chứ không chỉ validator xanh:
+validator không kiểm tra nội dung span, và cũng không phân biệt được "ghi hỏng"
+với "API không trả trường đó".
 
 ### 2.3 Tắt server bằng `kill` làm mất trace
 
@@ -278,12 +300,12 @@ cp .env.example .env        # rồi điền key Langfuse cá nhân
 
 ## 10. Còn lại và giới hạn đã biết
 
-| Việc | Trạng thái | Lý do |
+| Việc | Trạng thái | Ghi chú |
 |---|---|---|
-| CP3 challenge chính thức | Chưa làm | Chờ Lab Coach phát `config/challenge.json`. Đã sẵn sàng: `python scripts/inject_incident.py` và `python scripts/load_test.py --challenge --concurrency 5`. Hiện chỉ chạy practice scenario. |
-| Nộp repo lên LMS | Chưa làm | Cần URL repo cá nhân + commit SHA cuối. |
-| Ảnh evidence (06–14) | Chỉ có output text | Cần chụp màn hình Langfuse và dashboard. `submission/evidence/` đã có sẵn các file `.txt` tương ứng để đối chiếu. |
-| Metadata span trên API | **Chưa xác minh được** | Xem mục 2.2. Span và cây đúng; nhưng `model`/`usage`/`cost`/`metadata` trả về rỗng qua API. Cần kiểm tra bằng mắt trên UI. |
+| CP3 challenge chính thức | **Xong** | `day13-k4-l3a-monitoring-llmops-v1`. Root cause: span `retrieval` chiếm 2.501 s / tổng 2.653 s. Xem `submission/REPORT.md` §7. |
+| Ảnh evidence (01–14) | **Xong** | 12 ảnh `.png` trong `submission/evidence/`, không ảnh nào lộ key. |
+| Metadata span (model/token/cost) | **Xong, kiểm bằng ảnh UI** | API v2 không trả các trường này — xem mục 2.2. Ảnh `07` và `14` cho thấy đầy đủ. |
+| Nộp URL repo + commit SHA lên LMS | Chưa làm | Chỉ cần điền sau khi push. |
 
 ### Giới hạn cần nói thẳng khi demo
 
@@ -293,6 +315,6 @@ cp .env.example .env        # rồi điền key Langfuse cá nhân
 - **Prompt rollout cần khởi động lại server mỗi lần đổi label** (vì app đọc
   biến môi trường lúc khởi động). Đây là hạn chế của thiết kế starter, không
   phải lỗi cấu hình.
-- **Chưa có automated test cho Langfuse span contents.** Test chỉ kiểm tra
-  quan hệ cha–con và việc scrub; nội dung span phải kiểm tra thủ công vì SDK
-  không trả các trường đó qua API.
+- **Chưa có automated test cho nội dung span Langfuse.** Test chỉ kiểm tra quan
+  hệ cha–con và việc scrub; nội dung span phải kiểm bằng ảnh UI vì endpoint đọc
+  v2 không trả các trường đó.

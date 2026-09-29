@@ -15,29 +15,59 @@
 
 ## 2. Evidence index
 
-File `.txt` dưới đây là output thật đã commit. File `.png` cần chụp tay vì
-Langfuse yêu cầu đăng nhập.
+Ảnh `.png` dưới đây được chụp từ terminal và từ UI Langfuse trên project cá nhân
+`day13-k4-13a-2a202602496`; không ảnh nào lộ public/secret key.
 
 | Evidence | Đường dẫn | Trạng thái |
 |---|---|---|
-| Pytest baseline | `evidence/01-pytest-baseline.txt` | 22 passed (trước khi sửa) |
-| Pytest cuối | `evidence/01-pytest.txt` | 54 passed |
-| Log validator baseline | `evidence/02-log-validator-baseline.txt` | 30/100 (trước khi sửa) |
-| Log validator cuối | `evidence/02-log-validator.txt` | **100/100** |
-| Dashboard validator | `evidence/03-dashboard-validator.txt` | 6/6 panel |
-| Log thô baseline | `evidence/00-baseline-logs-raw.jsonl` | 21 dòng, 0 correlation ID |
-| Ghi chú evidence CP1 | `evidence/README-cp1.md` | log thật + PII thật |
-| Nối log ↔ trace | `evidence/06-trace-join.txt` | 4/4 request khớp trace |
-| Prompt v1/v2 + rollback | `evidence/10-prompt-rollback.txt` | đủ 6 bước, có version thật |
-| Structured log (ảnh) | `evidence/04-structured-log.png` | _cần chụp màn hình_ |
-| PII redaction (ảnh) | `evidence/05-pii-redaction.png` | _cần chụp màn hình_ |
-| Trace list (ảnh) | `evidence/06-trace-list.png` | _cần chụp từ Langfuse UI_ |
-| Trace waterfall (ảnh) | `evidence/07-trace-waterfall.png` | _cần chụp từ Langfuse UI_ |
-| Trace metadata (ảnh) | `evidence/08-trace-metadata.png` | _cần chụp từ Langfuse UI_ |
-| Prompt versions (ảnh) | `evidence/09-prompt-versions.png` | _cần chụp từ Langfuse UI_ |
-| Prompt rollback (ảnh) | `evidence/10-prompt-rollback.png` | _cần chụp từ Langfuse UI_ |
-| Dashboard runtime (ảnh) | `evidence/11-dashboard-overview.png` | _cần chụp màn hình Streamlit_ |
-| Incident metric + log + trace | `evidence/12-13-incident-metric-and-log.txt` | đủ: metric → log → trace |
+| Pytest cuối | `evidence/01-pytest.png` + `01-pytest.txt` | 54 passed |
+| Log validator cuối | `evidence/02-log-validator.png` + `.txt` | **100/100** |
+| Dashboard validator | `evidence/03-dashboard-validator.png` + `.txt` | 6/6 panel |
+| Structured log | `evidence/04-structured-log.png` | đủ `correlation_id`, `user_id_hash`, `session_id`, `feature`, `model`, `env`, `latency_ms`, `ttft_ms` |
+| PII redaction | `evidence/05-pii-redaction.png` | `REDACTED_EMAIL`, `REDACTED_PHONE_VN`, `REDACTED_CREDIT_CARD` |
+| Trace list | `evidence/06-trace-list.png` + `06-trace-join.txt` | tên project + `Total ≈ 130` trace |
+| Trace waterfall | `evidence/07-trace-waterfall.png` | root + `retrieval` + `llm-generation` |
+| Prompt versions | `evidence/09-prompt-versions.png` | v1 (`baseline`, `production`) và v2 (`candidate`) |
+| Prompt rollback | `evidence/10-prompt-rollback.txt` | đủ 6 bước, có version thật |
+| Dashboard runtime | `evidence/11-dashboard-overview.png` | đủ 6 panel, có time range, đơn vị, threshold |
+| Incident metric | `evidence/12-incident-metric.png` | P95 573 ms → 2653 ms |
+| Incident log | `evidence/13-incident-log.png` | `req-2c25fba7` latency 2653 ms, ttft 50 ms |
+| Incident trace | `evidence/14-incident-trace.png` | `retrieval` 2.50 s vs `llm-generation` 0.15 s |
+
+**Metadata của span generation** (model, token, cost) hiển thị đầy đủ trong ảnh
+`07-trace-waterfall.png` và `14-incident-trace.png` — ví dụ `model =
+claude-sonnet-4-5`, `cost = $0.001422`, `139 tokens`, liên kết prompt
+`day13-chat (v1)`.
+
+Các file `.txt` và `.jsonl` là output thật của script, dùng để đối chiếu:
+`01-pytest-baseline.txt`, `02-log-validator-baseline.txt`,
+`00-baseline-logs-raw.jsonl`, `12-13-incident-metric-and-log.txt`.
+
+Dòng log thật sau `scripts/load_test.py` (lấy từ `data/logs.jsonl`):
+
+```json
+{
+    "service": "api",
+    "payload": {"message_preview": "Can I get help with policy and monitoring?"},
+    "event": "request_received",
+    "correlation_id": "req-0a2c4b6f",
+    "session_id": "s04",
+    "env": "dev",
+    "feature": "qa",
+    "model": "claude-sonnet-4-5",
+    "user_id_hash": "u_75af0789",
+    "level": "info",
+    "ts": "2026-09-29T08:05:40.880940Z"
+}
+```
+
+Đếm marker PII trong cùng file log:
+
+```text
+REDACTED_CREDIT_CARD  1
+REDACTED_EMAIL        1
+REDACTED_PHONE_VN     1
+```
 
 ## 3. Kết quả kỹ thuật
 
@@ -230,14 +260,20 @@ Tiền tố chữ bảo đảm chuỗi số dài nhất chỉ 8, thấp hơn ng�
 `phone_vn`. Đánh đổi: entropy giảm từ 48 xuống 32 bit — chấp nhận được vì mục
 đích chỉ là pseudonym để nối log, không phải chống đoán trùng lặp.
 
-**Một lỗi/blocker đã gặp:** `client.update_current_span()` và
-`update_current_generation()` của Langfuse v4 không ghi được gì — `model`,
-`usage_details`, `cost_details`, `metadata` đều không tới server. Tôi cô lập
-bằng script độc lập: span và cây đúng, `propagate_attributes` hoạt động, nhưng
-mọi trường do `update_current_*` gán đều rỗng. Xử lý tạm thời: giữ
-`capture_input=False, capture_output=False` và scrub PII trước khi đưa dữ
-liệu vào trace để không rò PII, đồng thời ghi rõ giới hạn này thay vì giả vờ
-đã xong. Cần kiểm tra bằng mắt trên UI.
+**Một lỗi/blocker đã gặp:** khi đọc trace qua API v2 (`/api/public/v2/observations`),
+các trường `model`, `usage`, `cost`, `metadata`, `input`, `output` đều trả về
+`None`, dù không hề có lỗi nào được nêu ra. Tôi ban đầu **kết luận sai** rằng
+`update_current_generation()` không ghi được dữ liệu, và đã ghi nhận điều đó vào
+báo cáo. Sau khi bạn kiểm tra bằng mắt trên UI và tôi thử ba cách ghi khác nhau
+(`update_current_*`, `start_observation`, `start_as_current_observation`) thì kết
+luận đúng là: **đây là hạn chế của phía đọc (read-side), không phải phía ghi.**
+Ảnh chụp UI cho thấy span `llm-generation` có đủ `model = claude-sonnet-4-5`,
+`cost = $0.001422`, `139 tokens` và liên kết prompt `day13-chat (v1)`; còn
+endpoint API chỉ trả về một tập cột rút gọn, không có các trường đó. Bài học:
+**không được kết luận "ghi hỏng" chỉ từ việc API đọc trả rỗng** — phải kiểm tra
+nơi dữ liệu thực sự được hiển thị. Xử lý: giữ `capture_input=False,
+capture_output=False` và scrub PII trước khi đưa dữ liệu vào trace để không rò
+PII, và xác minh bằng ảnh chụp UI thay vì tin API.
 
 **Cách tìm nguyên nhân và xử lý:** xem metric để biết triệu chứng và khoảng thời
 gian → lọc log lấy `correlation_id` của request bất thường → tra trace có cùng
@@ -264,25 +300,24 @@ biến cảm giác "chậm" thành con số có thể tranh luận: ngưỡng 30
 **Điều quan trọng nhất đã học:** validator xanh không đồng nghĩa bài làm đúng.
 `validate_logs.py` đạt 100/100 nếu mọi dòng log đủ trường và không còn PII thô,
 nhưng nó không kiểm tra trace có span con hay không, cũng không kiểm tra trace có
-nối được với log. Ba lỗi tôi gặp (hash bị detector CCCD gắn cờ,
-`update_current_*` bị bỏ qua, kill server làm mất trace) đều là loại validator
-không bắt được — vì vậy tôi đã thêm `verify_trace_join.py` và
-`readiness_check.py` để tự kiểm chứng những phần mà validator không chạm tới.
+nối được với log. Hai lỗi tôi gặp (hash bị detector CCCD gắn cỏ, kill server làm
+mất trace) đều là loại validator không bắt được — vì vậy tôi đã thêm
+`verify_trace_join.py` và `readiness_check.py` để tự kiểm chứng những phần mà
+validator không chạm tới. Một lần nữa nữa, tôi cũng học được rằng **bằng chứng
+phải lấy từ nơi dữ liệu thực sự hiển thị**: đọc API trả rỗng đã khiến tôi kết
+luận sai rằng trace không ghi được metadata, trong khi ảnh UI cho thấy có đủ.
 
 **Hạn chế hoặc phần chưa hoàn thành:**
 
-- Metadata span (`model`, `usage`, `cost`) chưa xác minh được qua API; cần kiểm
-  bằng mắt trên UI Langfuse.
-- Ảnh evidence của CP3 (12–14) dạng text đã có trong
-  `evidence/12-13-incident-metric-and-log.txt`; ảnh `.png` tương ứng vẫn cần chụp
-  từ UI Langfuse để khớp checklist của `docs/SUBMISSION.md`.
-- Chưa có ảnh evidence `.png` (cần đăng nhập Langfuse để chụp).
+- Metadata span (`model`, `usage`, `cost`) đã xác minh bằng ảnh UI: span
+  `llm-generation` hiển thị `claude-sonnet-4-5`, `139 tokens`, `$0.001422`.
 - Dashboard là bảng số liệu chứ không phải biểu đồ — cố ý để luôn đọc được tên
   panel, đơn vị, time range và threshold, vì rubric yêu cầu đọc được các thông
   tin này. Nếu muốn biểu đồ thật thì cần thêm thư viện vẽ.
-- Chưa có automated test cho nội dung span Langfuse, vì SDK không trả các
-  trường đó qua API.
-- Phần nộp bài và commit SHA cuối còn để trống.
+- Chưa có automated test cho *nội dung* span Langfuse (model/token/cost), vì
+  endpoint đọc v2 không trả các trường đó. Việc này phải kiểm bằng ảnh UI.
+- Chưa có ảnh riêng cho `08-trace-metadata`; nội dung metadata đó đã hiển thị rõ
+  trong ảnh `07-trace-waterfall.png` và `14-incident-trace.png`.
 
 ## 9. Checklist trước khi nộp
 
@@ -292,5 +327,5 @@ không bắt được — vì vậy tôi đã thêm `verify_trace_join.py` và
 - [x] Trace/prompt evidence thuộc project Langfuse cá nhân
 - [x] Repository chạy lại được theo README
 - [x] Không có secret, API key hay PII thô
-- [ ] Ảnh evidence `.png` đã chụp đủ
+- [x] Ảnh evidence `.png` đã chụp đủ
 - [ ] URL repo và commit SHA cuối đã nộp trên LMS/Codelabs
