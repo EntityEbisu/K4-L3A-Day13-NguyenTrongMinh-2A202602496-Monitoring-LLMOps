@@ -9,7 +9,7 @@
 - **MSSV:** 02496
 - **Lớp:** K4-L3A
 - **Repository URL:** https://github.com/EntityEbisu/K4-L3A-Day13-NguyenTrongMinh-2A202602496-Monitoring-LLMOps
-- **Commit SHA cuối:** xem `git log -1 --oneline` (điền sau khi chốt)
+- **Commit SHA cuối:** `ec06679` — https://github.com/EntityEbisu/K4-L3A-Day13-NguyenTrongMinh-2A202602496-Monitoring-LLMOps/commit/ec06679
 - **Challenge ID:** `day13-k4-l3a-monitoring-llmops-v1` (cohort `K4`, seed `1311`)
 - **Tên project Langfuse cá nhân:** `day13-k4-l3a-02496`
 
