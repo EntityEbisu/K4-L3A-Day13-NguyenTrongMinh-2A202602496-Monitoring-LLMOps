@@ -5,6 +5,9 @@ import time
 from dataclasses import dataclass
 
 from .incidents import STATE
+from .pii import summarize_text
+from .pricing import estimate_cost
+from .tracing import get_langfuse_client, observe
 
 
 @dataclass
@@ -25,7 +28,13 @@ class FakeLLM:
     def __init__(self, model: str = "claude-sonnet-4-5") -> None:
         self.model = model
 
+    @observe(name="llm-generation", as_type="generation", capture_input=False, capture_output=False)
     def generate(self, prompt: str) -> FakeResponse:
+        """Sinh câu trả lời giả lập; tạo child observation loại ``generation``.
+
+        Không gọi dịch vụ thật: token ngẫu nhiên và độ trễ chỉ do ``time.sleep``.
+        """
+        client = get_langfuse_client()
         started = time.perf_counter()
         time.sleep(0.05)  # mô phỏng thời điểm token đầu tiên sẵn sàng
         ttft_ms = int((time.perf_counter() - started) * 1000)
@@ -34,9 +43,18 @@ class FakeLLM:
         output_tokens = random.randint(80, 180)
         if STATE["cost_spike"]:
             output_tokens *= 4
+        cost = estimate_cost(input_tokens, output_tokens)
         answer = (
             "Starter answer. You should improve this output logic and add better quality checks. "
             "Use retrieved context and keep responses concise."
+        )
+        client.update_current_generation(
+            model=self.model,
+            # Scrub trước khi đưa vào trace để không có PII thô.
+            input=summarize_text(prompt),
+            output=summarize_text(answer),
+            usage_details={"input": input_tokens, "output": output_tokens},
+            cost_details={"input": cost["input"], "output": cost["output"]},
         )
         return FakeResponse(
             text=answer,

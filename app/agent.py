@@ -8,6 +8,7 @@ from . import metrics
 from .mock_llm import FakeLLM
 from .mock_rag import retrieve
 from .pii import hash_user_id, summarize_text
+from .pricing import estimate_cost
 from .prompt_management import resolve_prompt
 from .tracing import get_langfuse_client, observe, propagate_attributes, tracing_enabled
 
@@ -77,7 +78,7 @@ class LabAgent:
                 response = self.llm.generate(prompt.text)
             quality_score = self._heuristic_quality(message, response.text, docs)
             latency_ms = int((time.perf_counter() - started) * 1000)
-            cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
+            cost_usd = estimate_cost(response.usage.input_tokens, response.usage.output_tokens)["total"]
 
         metrics.record_request(
             latency_ms=latency_ms,
@@ -97,11 +98,6 @@ class LabAgent:
             cost_usd=cost_usd,
             quality_score=quality_score,
         )
-
-    def _estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
-        input_cost = (tokens_in / 1_000_000) * 3
-        output_cost = (tokens_out / 1_000_000) * 15
-        return round(input_cost + output_cost, 6)
 
     def _heuristic_quality(self, question: str, answer: str, docs: list[str]) -> float:
         score = 0.5
