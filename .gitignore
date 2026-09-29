@@ -9,3 +9,6 @@ data/audit.jsonl
 config/challenge.json
 .pytest_cache/
 .antigravity/
+
+# Hermes plan files (local only)
+.hermes/
