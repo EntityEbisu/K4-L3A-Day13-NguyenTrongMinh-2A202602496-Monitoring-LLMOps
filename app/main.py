@@ -108,6 +108,23 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail=error_type) from exc
 
 
+@app.post("/traces/flush")
+async def flush_traces() -> JSONResponse:
+    """Đẩy hết trace đang buffer lên Langfuse trước khi tắt tiến trình.
+
+    Langfuse gom span theo batch; nếu tắt server bằng kill thì buffer bị mất và
+    các trace vừa tạo không bao giờ tới server. Gọi endpoint này trước khi
+    khởi động lại uvicorn (ví dụ khi đổi LANGFUSE_PROMPT_LABEL) để không mất dữ
+    liệu. Không dùng cho luồng nghiệp vụ, chỉ phục vụ vận hành lab.
+    """
+    if not tracing_enabled():
+        return JSONResponse({"ok": True, "flushed": False, "reason": "tracing disabled"})
+    from app.tracing import get_langfuse_client
+
+    get_langfuse_client().flush()
+    return JSONResponse({"ok": True, "flushed": True})
+
+
 @app.post("/incidents/{name}/enable")
 async def enable_incident(name: str) -> JSONResponse:
     try:

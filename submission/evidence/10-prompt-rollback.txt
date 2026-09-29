@@ -1,0 +1,57 @@
+=== Trang thai label ban dau ===
+--- Prompt day13-chat ---
+  versions có sẵn: [1, 2]
+  baseline    -> v1
+  candidate   -> v2
+  production  -> v1
+
+=== 1. Chay input voi label=baseline (v1) ===
+label          : baseline
+prompt name    : day13-chat
+version        : v1   (đọc từ Langfuse lúc chạy)
+correlation_id : req-9f15e93e
+latency_ms     : 472
+tokens         : in=29 out=135
+
+=== 2. Chay input voi label=candidate (v2) ===
+  (đã flush trace lên Langfuse)
+label          : candidate
+prompt name    : day13-chat
+version        : v2   (đọc từ Langfuse lúc chạy)
+correlation_id : req-2c981162
+latency_ms     : 487
+tokens         : in=46 out=93
+
+=== 3. Promote: gan label production sang v2 ===
+Đã gán label production cho day13-chat v2
+--- Prompt day13-chat ---
+  versions có sẵn: [1, 2]
+  baseline    -> v1
+  candidate   -> v2
+  production  -> v2
+
+=== 4. Chay lai sau khi promote (label=production) ===
+  (đã flush trace lên Langfuse)
+label          : production
+prompt name    : day13-chat
+version        : v2   (đọc từ Langfuse lúc chạy)
+correlation_id : req-ccae88bd
+latency_ms     : 477
+tokens         : in=46 out=159
+
+=== 5. Rollback: gan label production ve v1 ===
+Đã gán label production cho day13-chat v1
+--- Prompt day13-chat ---
+  versions có sẵn: [1, 2]
+  baseline    -> v1
+  candidate   -> v2
+  production  -> v1
+
+=== 6. Chay lai sau khi rollback (label=production) ===
+  (đã flush trace lên Langfuse)
+label          : production
+prompt name    : day13-chat
+version        : v1   (đọc từ Langfuse lúc chạy)
+correlation_id : req-624c2ac1
+latency_ms     : 603
+tokens         : in=29 out=174
