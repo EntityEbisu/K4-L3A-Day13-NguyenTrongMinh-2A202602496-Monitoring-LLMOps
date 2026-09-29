@@ -1,0 +1,18 @@
+--- Log ↔ Trace join (1h) ---
+request trong log: 10
+trace root trong Langfuse: 44
+observations tải về: 67
+
+  req-65de1609    830 ms  ->  trace 366cb33fed35ae01…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-5d434f46    287 ms  ->  trace c4d746b493a32e9d…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-973f488f    471 ms  ->  trace 43d555e0766d2248…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-ef372ed2    278 ms  ->  trace 2908970ac8d0043f…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-886f9428    306 ms  ->  trace 8ad43d20239b8101…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-3ff8f734    298 ms  ->  trace d97a5f975acd9b3e…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-038b70ba    295 ms  ->  trace 86baeb244fa3c57a…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-866bd6f2    271 ms  ->  trace 1a6dba5ab1e18768…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-497f4b91    673 ms  ->  trace 2da01772953b6daf…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-bed957ab    412 ms  ->  trace 2da01772953b6daf…  lệch 0.41s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+
+Khớp: 10/10 request
+PASS: mọi request trong log đều có trace cha-con tương ứng.
