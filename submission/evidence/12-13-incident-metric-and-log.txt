@@ -1,0 +1,77 @@
+=== CP3 INCIDENT EVIDENCE (official challenge) ===
+generated: 2026-09-29T09:17:16Z
+
+--- Challenge identity (from config/challenge.json, Lab Coach) ---
+  challenge_id          : day13-k4-l3a-monitoring-llmops-v1
+  cohort                : K4
+  incident              : rag_slow
+  seed                  : 1311
+  affected_feature      : monitoring
+  latency_threshold_ms  : 2000
+  queries              : 5
+  query order after seed 1311 shuffle:
+   - k4-l3a-u04 | Which signal should be checked after latency increases?
+   - k4-l3a-u01 | Explain why metrics traces and logs work together.
+   - k4-l3a-u05 | Describe how to prove a slow span is the root cause.
+   - k4-l3a-u03 | Summarize the observability workflow for an AI API.
+   - k4-l3a-u02 | How should an engineer investigate tail latency?
+
+--- 1. METRIC + 2. LOG (scripts/analyze_incident.py) ---
+======================================================================
+PHÂN TÍCH INCIDENT — challenge: day13-k4-l3a-monitoring-llmops-v1
+Ngưỡng latency trong challenge: 2000 ms
+======================================================================
+
+--- TRƯỚC sự cố (latency <= ngưỡng) ---
+  số request      : 10
+  latency P50/P95 : 152 / 573 ms
+  latency max     : 573 ms
+  TTFT P95        : 50 ms
+  khoảng thời gian: 2026-09-29T09:12:29.064217Z  ->  2026-09-29T09:12:30.461791Z
+
+--- TRONG sự cố (latency > ngưỡng) ---
+  số request      : 5
+  latency P50/P95 : 2652 / 2653 ms
+  latency max     : 2653 ms
+  TTFT P95        : 50 ms
+  khoảng thời gian: 2026-09-29T09:12:50.518468Z  ->  2026-09-29T09:13:01.142351Z
+
+--- Nhận định dựa trên TTFT ---
+  TTFT P95 trước sự cố : 50 ms
+  TTFT P95 trong sự cố : 50 ms
+  => TTFT gần như không đổi; độ trễ tăng KHÔNG nằm ở bước sinh câu trả lời.
+
+--- Request bất thường, chậm nhất trước (dùng để tra trace) ---
+  2026-09-29T09:12:58.486359Z  req-2c25fba7  latency=2653ms  ttft=50ms  feature=monitoring
+  2026-09-29T09:12:50.518468Z  req-0ed81e17  latency=2652ms  ttft=50ms  feature=monitoring
+  2026-09-29T09:12:53.174354Z  req-fd208d67  latency=2652ms  ttft=50ms  feature=monitoring
+  2026-09-29T09:12:55.828997Z  req-7f75f532  latency=2652ms  ttft=50ms  feature=monitoring
+  2026-09-29T09:13:01.142351Z  req-e7997061  latency=2652ms  ttft=50ms  feature=monitoring
+
+Bước tiếp theo: dùng correlation_id ở trên để mở trace cùng ID trên Langfuse và so sánh span `retrieval` với `llm-generation`.
+======================================================================
+
+--- 3. LOG -> TRACE join (scripts/verify_trace_join.py) ---
+--- Log ↔ Trace join (1h) ---
+request trong log: 15
+trace root trong Langfuse: 24
+observations tải về: 69
+
+  req-b7b1e0cb    573 ms  ->  trace c88d7367575316f7…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-5e8c4b64    152 ms  ->  trace 3d132d093311fbdc…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-532707b1    152 ms  ->  trace efc618e98536d3e2…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-e056b594    152 ms  ->  trace a1afd887317cbc9d…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-6f0bb292    151 ms  ->  trace 8b63d4e559917bef…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-1f91ae66    151 ms  ->  trace 4afbd806166ae54a…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-180c15c1    151 ms  ->  trace 19efb3fe3509d0c9…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-f47fc9ed    152 ms  ->  trace b37405c44786946b…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-11bff4dc    151 ms  ->  trace 614e2f905e63f64d…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-6d78ec01    151 ms  ->  trace 9a6c2fb61aa2694a…  lệch 1.97s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-0ed81e17   2652 ms  ->  trace 0ea32ed3c26de14d…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-fd208d67   2652 ms  ->  trace 042a1747e78b3f91…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-7f75f532   2652 ms  ->  trace 8f6849ce4422dfb4…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+  req-2c25fba7   2653 ms  ->  trace 8981a24707179300…  lệch 0.00s  tree=AGENT,GENERATION,RETRIEVER  spans=3
+
+Khớp: 14/15 request
+Lưu ý: 1 request chưa có trace riêng. Đây là hệ quả của workload đồng thời (--concurrency > 1): nhiều request có thể dùng chung một trace, nên số trace không nhất thiết bằng số request.
+PASS: mọi request được gán đều có trace cha-con tương ứng.

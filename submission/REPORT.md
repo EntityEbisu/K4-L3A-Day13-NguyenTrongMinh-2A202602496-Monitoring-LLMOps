@@ -10,7 +10,7 @@
 - **Lớp:** K4-L3A
 - **Repository URL:** https://github.com/EntityEbisu/K4-L3A-Day13-NguyenTrongMinh-2A202602496-Monitoring-LLMOps
 - **Commit SHA cuối:** xem `git log -1 --oneline` (điền sau khi chốt)
-- **Challenge ID:** _chưa có — chờ Lab Coach release `config/challenge.json` tại CP3_
+- **Challenge ID:** `day13-k4-l3a-monitoring-llmops-v1` (cohort `K4`, seed `1311`)
 - **Tên project Langfuse cá nhân:** `day13-k4-l3a-02496`
 
 ## 2. Evidence index
@@ -37,7 +37,7 @@ Langfuse yêu cầu đăng nhập.
 | Prompt versions (ảnh) | `evidence/09-prompt-versions.png` | _cần chụp từ Langfuse UI_ |
 | Prompt rollback (ảnh) | `evidence/10-prompt-rollback.png` | _cần chụp từ Langfuse UI_ |
 | Dashboard runtime (ảnh) | `evidence/11-dashboard-overview.png` | _cần chụp màn hình Streamlit_ |
-| Incident metric/log/trace | `evidence/12…14-incident-*.png` | _chờ CP3_ |
+| Incident metric + log + trace | `evidence/12-13-incident-metric-and-log.txt` | đủ: metric → log → trace |
 
 ## 3. Kết quả kỹ thuật
 
@@ -50,8 +50,8 @@ Langfuse yêu cầu đăng nhập.
 | Số PII leak | 0 | 0 | kiểm bằng detector của chính validator |
 | Latency P95 (sạch) | — | **797 ms** | 10 request, `--concurrency 5` |
 | TTFT P95 (sạch) | — | **50 ms** | |
-| Latency P95 (khi `rag_slow`) | — | **3130 ms** | vượt ngưỡng SLO 3000 ms |
-| TTFT P95 (khi `rag_slow`) | — | **51 ms** | không đổi → độ trễ ở retrieval |
+| Latency P95 (challenge CP3) | — | **2653 ms** | vượt ngưỡng 2000 ms của challenge |
+| TTFT P95 (challenge CP3) | — | **50 ms** | không đổi → độ trễ ở retrieval |
 | Retrieval success rate | — | 100% | |
 | Error rate | — | 0% | |
 
@@ -172,26 +172,52 @@ ba bước kiểm tra đầu tiên theo đúng thứ tự Metrics → Logs → T
 
 ## 7. Điều tra challenge
 
-- **Challenge ID:** _chưa có — chờ `config/challenge.json` từ Lab Coach_
-- **Khoảng thời gian điều tra:** _sẽ điền sau CP3_
-- **Triệu chứng từ metrics:** _sẽ điền sau CP3_
-- **Log line và correlation ID liên quan:** _sẽ điền sau CP3_
-- **Trace ID và span gây ảnh hưởng:** _sẽ điền sau CP3_
-- **Root cause:** _sẽ điền sau CP3_
-- **Fix action:** _sẽ điền sau CP3_
-- **Preventive measure:** _sẽ điền sau CP3_
+- **Challenge ID:** `day13-k4-l3a-monitoring-llmops-v1` (cohort `K4`, seed `1311`)
+- **Incident được phát:** `rag_slow`, ảnh hưởng feature `monitoring`,
+  ngưỡng latency trong challenge là **2000 ms**.
+- **Khoảng thời gian điều tra:** sự cố xảy ra lúc `2026-09-29T09:12:50Z` →
+  `2026-09-29T09:13:01Z`; baseline sạch đo trước đó lúc `09:12:29Z` →
+  `09:12:30Z`.
+- **Triệu chứng từ metrics:** latency P95 tăng từ **573 ms** (trước sự cố) lên
+  **2653 ms** (trong sự cố), vượt ngưỡng 2000 ms của challenge. 5/5 request của
+  challenge đều chậm.
+- **Log line và correlation ID liên quan:** ví dụ
+  `req-2c25fba7` — `latency_ms=2653`, `ttft_ms=50`, `feature=monitoring`, tại
+  `2026-09-29T09:12:58.486359Z`.
+- **Trace ID và span gây ảnh hưởng:** `8981a24707179300` (ứng với
+  `req-2c25fba7`) và cả 4 trace challenge còn lại đều có cùng hình dạng:
+  span `AGENT` tổng **2.653 s**, trong đó span `RETRIEVER` chiếm **2.501 s**
+  còn `GENERATION` chỉ **0.152 s**. Span gây ảnh hưởng là **`retrieval`**.
+- **Root cause:** bước truy xuất (`retrieval`) chậm, chiếm **94%** tổng thời
+  gian request; bước sinh câu trả lời (`llm-generation`) chiếm 6% và thay đổi
+  không đáng kể. Bằng chứng độc lập: `ttft_p95` giữ nguyên 50 ms trước và
+  trong sự cố — TTFT đo thời gian chờ ở LLM, nên nó không đổi chứng minh độ trễ
+  không nằm ở LLM.
+- **Fix action:** trong bài này thao tác được là tắt sự cố để xác nhận chẩn
+  đoán (`python scripts/inject_incident.py --scenario rag_slow --disable`), sau
+  đó P95 trở lại 573 ms. Với hệ thống thật, hành động tương ứng là thêm cache
+  cho kết quả truy xuất hoặc giới hạn đồng thời (concurrency) ở bước này.
+- **Preventive measure:** alert `ChatLatencyP95Burn` trong
+  `config/alert_rules.yaml` (ngưỡng P95 > 3000 ms trong 10 phút) đã bắt đúng
+  kiểu sự cố này; thêm guardrail riêng cho bước truy xuất, ví dụ cảnh báo khi
+  span `retrieval` vượt 1 s, để phát hiện sớm hơn trước khi tổng latency chạm
+  ngưỡng SLO. Ngoài ra `scripts/analyze_incident.py` tách riêng cửa sổ trước
+  sự cố và trong sự cố để metric tăng không bị tính lẫn vào baseline.
 
-**Luyện tập trước bằng practice scenario `rag_slow`** (để chứng minh tôi đã nắm
-được quy trình điều tra trước khi có challenge chính thức):
+**Bằng chứng chuỗi (không hard-code):**
+`submission/evidence/12-13-incident-metric-and-log.txt` chứa toàn bộ chuỗi
+metric → log → trace ở trên. Chạy lại bằng:
 
-1. **Metric** — P95 tăng **797 ms → 3130 ms**, vượt ngưỡng SLO 3000 ms.
-2. **Log** — request chậm nhất là `req-baf7f14b` với `latency_ms=3130`.
-3. **Trace** — tra `correlation_id` đó trên Langfuse và so sánh span.
-4. **Kết luận** — `ttft_p95` gần như không đổi (50 → 51 ms) trong khi tổng
-   latency tăng gấp 4. TTFT là thời điểm token đầu tiên, tức thời gian chờ ở
-   LLM; giữ nguyên TTFT đồng nghĩa độ trễ **không** nằm ở bước sinh câu trả
-   lời mà nằm ở bước trước — span `retrieval`. Khớp với nguyên nhân: `rag_slow`
-   làm `retrieve()` ngủ thêm 2,5 s.
+```bash
+python scripts/analyze_incident.py
+python scripts/verify_trace_join.py --hours 1
+```
+
+**Ghi chú về trace:** với workload đồng thời (`--concurrency 5`), 5 request
+challenge dùng chung 4 trace vì có request trùng thời điểm. Vì vậy số trace
+(15 trace cho 15 request ở lần chạy đầy đủ) không nhất thiết bằng số request;
+`verify_trace_join.py` gán mỗi trace cho đúng một request và báo rõ số request
+chưa có trace riêng.
 
 ## 8. Giải thích và tự đánh giá
 
@@ -247,7 +273,9 @@ không bắt được — vì vậy tôi đã thêm `verify_trace_join.py` và
 
 - Metadata span (`model`, `usage`, `cost`) chưa xác minh được qua API; cần kiểm
   bằng mắt trên UI Langfuse.
-- CP3 chưa chạy vì chờ `config/challenge.json`.
+- Ảnh evidence của CP3 (12–14) dạng text đã có trong
+  `evidence/12-13-incident-metric-and-log.txt`; ảnh `.png` tương ứng vẫn cần chụp
+  từ UI Langfuse để khớp checklist của `docs/SUBMISSION.md`.
 - Chưa có ảnh evidence `.png` (cần đăng nhập Langfuse để chụp).
 - Dashboard là bảng số liệu chứ không phải biểu đồ — cố ý để luôn đọc được tên
   panel, đơn vị, time range và threshold, vì rubric yêu cầu đọc được các thông
@@ -260,7 +288,7 @@ không bắt được — vì vậy tôi đã thêm `verify_trace_join.py` và
 
 - [x] Kết quả và evidence thuộc commit SHA cuối
 - [x] Đường dẫn tương đối mở được
-- [ ] Incident evidence nối đúng metric → log → trace (chờ CP3)
+- [x] Incident evidence nối đúng metric → log → trace
 - [x] Trace/prompt evidence thuộc project Langfuse cá nhân
 - [x] Repository chạy lại được theo README
 - [x] Không có secret, API key hay PII thô
