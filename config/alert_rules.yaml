@@ -1,25 +1,59 @@
+# Alert rules — Day 13 Monitoring & LLMOps (K4-L3A)
+#
+# Cả ba alert đều symptom-based: điều kiện diễn đạt bằng triệu chứng người
+# dùng cảm nhận được (chờ lâu, không có câu trả lời, câu trả lời kém) và bằng
+# guardrail trong config/slo.yaml, KHÔNG gắn với tên hàm hay module nội bộ.
+# Ngưỡng lấy từ số đo thật: P95 baseline 797 ms, P95 khi rag_slow 3130 ms.
 alerts:
-  - name: TODO_alert_1
-    severity: TODO
-    condition: TODO
-    duration: TODO
+  - name: ChatLatencyP95Burn
+    severity: critical
     type: symptom-based
+    condition: 'p95(response_sent.latency_ms) over 5m > 3000'
+    duration: 10m
     channel: slack
-    owner: TODO
+    slack_channel: "#day13-oncall"
+    owner: Nguyen Trong Minh (02496)
+    slo: fast_successful_requests
     runbook: docs/alerts.md#alert-1
-  - name: TODO_alert_2
-    severity: TODO
-    condition: TODO
-    duration: TODO
+    summary: >-
+      Người dùng chờ hơn 3 giây mới nhận được câu trả lời; SLO
+      fast_successful_requests đang đốt error budget.
+    evidence: >-
+      Đã tái hiện bằng practice scenario `rag_slow`: P95 797 ms -> 3130 ms,
+      vượt ngưỡng, trong khi TTFT giữ nguyên 50 ms nên nghi vấn bước retrieval.
+
+  - name: RetrievalFailureSpike
+    severity: critical
     type: symptom-based
+    condition: >-
+      count(request_failed where tool_name == "retrieval") /
+      count(request_received) * 100 over 5m > 2
+    duration: 5m
     channel: slack
-    owner: TODO
+    slack_channel: "#day13-oncall"
+    owner: Nguyen Trong Minh (02496)
+    slo: fast_successful_requests
     runbook: docs/alerts.md#alert-2
-  - name: TODO_alert_3
-    severity: TODO
-    condition: TODO
-    duration: TODO
+    summary: >-
+      Trên 2% request thất bại ở bước truy xuất, nên câu trả lời thiếu căn cứ
+      hoặc không được trả về; vi phạm guardrail error_rate_pct_max.
+    evidence: >-
+      Đã tái hiện bằng practice scenario `tool_fail`: span retrieval được đánh
+      dấu level ERROR và log ghi event request_failed với tool_success = false.
+
+  - name: QualityProxyDegraded
+    severity: warning
     type: symptom-based
+    condition: 'mean(response_sent.quality_score) over 15m < 0.75'
+    duration: 15m
     channel: slack
-    owner: TODO
+    slack_channel: "#day13-quality"
+    owner: Nguyen Trong Minh (02496)
+    slo: guardrail_quality
     runbook: docs/alerts.md#alert-3
+    summary: >-
+      Chất lượng câu trả lời suy giảm trung bình; thường do prompt version mới
+      được đưa lên production hoặc truy xuất không match tài liệu nào.
+    evidence: >-
+      Guardrail quality_score_avg_min = 0.75 trong config/slo.yaml; baseline đo
+      được 0,88 nên có biên an toàn trước khi báo động.
